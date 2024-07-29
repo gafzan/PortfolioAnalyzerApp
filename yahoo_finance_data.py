@@ -3,6 +3,7 @@
 import pandas as pd
 from yahoo_fin import stock_info
 from functools import reduce
+from yahooquery import Ticker
 
 MARKET_MAP = {"Chicago Board of Trade (CBOT)***": {"COUNTRY": "United States of America", "SUFFIX": ".CBT"},
               "Chicago Mercantile Exchange (CME)***": {"COUNTRY": "United States of America", "SUFFIX": ".CME"},
@@ -125,6 +126,10 @@ def _get_price_data(tickers: {str, list}, data_fld: str, start_date: str = None,
 
     # pivot the raw data
     df = pd.pivot_table(raw_df.reset_index(), values=data_fld, index=['index'], columns=['ticker'])
+
+    # make sure the tickers are in the same order
+    tickers = [t.upper() for t in tickers.copy()]
+    df = df.loc[:, tickers]
     return df
 
 
@@ -181,3 +186,33 @@ def get_adjclose_price_data(tickers: {str, list}, start_date: str = None, end_da
     :return: DataFrame
     """
     return _get_price_data(tickers=tickers, data_fld='adjclose', start_date=start_date, end_date=end_date)
+
+
+def get_currency_ticker_map(ticker_currency_target_map: dict) -> dict:
+    """
+    Returns a dict with tickers as keys and the corresponding Yahoo FInance currency ticker as values given that a dict
+    of target currencies has been provided
+    :param ticker_currency_target_map: dict
+    :return: dict
+    """
+
+    # extract all the tickers and store in a list
+    tickers = [k for k, _ in ticker_currency_target_map.items()]
+    yf_query = Ticker(tickers)  # query the Ticker information like the 'currency'
+
+    result = {}  # initialize the result
+    for ticker in tickers:
+        denominated_ccy = yf_query.summary_detail[ticker]['currency']
+        target_currency = ticker_currency_target_map[ticker]
+
+        # if the denominated currency is the same as the target, ignore the ticker
+        if denominated_ccy != target_currency:
+            if denominated_ccy == 'USD':
+                # the base currency is USD so the ticker symbol should be quotation_FX=X
+                result[ticker] = f'{target_currency}=X'
+            else:
+                # quotation currency_
+                result[ticker] = f'{denominated_ccy}{target_currency}=X'
+    return result
+
+

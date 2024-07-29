@@ -4,3 +4,5 @@ numpy
 plotly
 requests
 yahoo-fin
+yahooquery
+statsmodels
