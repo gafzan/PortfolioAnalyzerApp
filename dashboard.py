@@ -371,12 +371,12 @@ def display_positions(table_name: str, input_type: str) -> None:
 st.title('Beta')
 st.write('This tool allows you to calculate regression Betas for a specified portfolio and a benchmark.\nThe benchmark '
          'can either be a single or a weighted portfolio of underlyings.')
+st.button(f'Calculate beta', on_click=perform_calculation)
 with st.expander('Implementation steps'):
     st.write(
         "1. Create a portfolio in the left sidebar\n\n2. Setup a benchmark by clicking 'Benchmark' below\n\n3. (Optional) "
         "Adjust the Beta calculation under 'Model configuration'\n\n4. Click 'Calculate beta'"
     )
-st.button(f'Calculate beta', on_click=perform_calculation)
 
 price_type = st.sidebar.radio('Price', ['Close', 'Adj. Close'], help="Adjusted close is the closing price after "
                                                                      "adjustments for all applicable splits and dividend "
