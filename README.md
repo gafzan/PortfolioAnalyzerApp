@@ -1,2 +1,2 @@
 # PortfolioAnalyzerApp
-PortfolioAnalyzerApp is an app powered by streamlit to do various analysis of a portfolio
+PortfolioAnalyzerApp is an app powered by streamlit to do beta analysis of portfolios
