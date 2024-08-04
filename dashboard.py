@@ -1,10 +1,13 @@
 """dashboard.py"""
-
 import streamlit as st
 import uuid
+
 import pandas as pd
+import numpy as np
 import datetime
+
 import plotly.express as px
+import plotly.figure_factory as ff
 
 from yahoo_finance_data import get_adjclose_price_data
 from yahoo_finance_data import get_close_price_data
@@ -38,7 +41,7 @@ RETURN_CALCULATION_CONFIG = {
     },
     'Monthly Returns': {
         'label': 'months',
-        'default': 12,
+        'default': 24,
         'daily_lag': 20
     },
     'Yearly Returns': {
@@ -90,10 +93,10 @@ def generate_ticker_row(row_id, num_input_label: str, table_name: str) -> dict:
                                                 help="Insert Yahoo Finance tickers. Tickers for indices starts with "
                                                      "'^'. For example, to get S&P 500 type '^SPX'").upper()
     if num_input_label == 'Weight (%)':
-        row_qty = ticker_row_columns[1].slider(num_input_label, min_value=0, max_value=100, value=100,
-                                               key=f"nbr_{row_id}",
-                                               help='Weights will later be normalized such that the '
-                                                    'sum of weights equals 100%')
+        row_qty = ticker_row_columns[1].number_input(num_input_label, min_value=0.0, max_value=100.0, value=100.0,
+                                                     key=f"nbr_{row_id}",
+                                                     help='Weights will later be normalized such that the '
+                                                          'sum of weights equals 100%')
     else:
         row_qty = ticker_row_columns[1].number_input(num_input_label, min_value=0, step=1, key=f"nbr_{row_id}")
     row_mkt = ticker_row_columns[2].selectbox("Market", [''] + list(MARKET_MAP.keys()), key=f'mkt_{row_id}',
@@ -172,6 +175,7 @@ def get_price_return_df(px_df: pd.DataFrame) -> pd.DataFrame:
     :return: DataFrame
     """
     return_basis_lag = RETURN_CALCULATION_CONFIG[px_return_basis]['daily_lag']
+
     if allow_return_overlap:
         px_return_df = px_df.pct_change(return_basis_lag)
     else:
@@ -203,16 +207,43 @@ def make_scatter_plot(px_return_df: pd.DataFrame) -> None:
     return
 
 
-def calculate_and_display_beta(px_return_df: pd.DataFrame) -> None:
+def calculate_and_display_beta(px_return_df: pd.DataFrame, ticker_first_date_map: dict) -> None:
     """
     Calculates total and rolling Beta and displays the result in a scatter plot as well as a line chart
     :param px_return_df: DataFrame
+    :param ticker_first_date_map: dict ticker as keys and the first available date for each ticker as values
     :return: None
     """
+    # filter the price return based on start and end dates
+    time_period_filtered_px_return_df = px_return_df.loc[start_date: end_date, :].copy()
+
+    # write a disclaimer about the data availability
+    st.write(
+        f"""
+        Based on prices from Yahoo Finance between {time_period_filtered_px_return_df.index[0].strftime('%#d %B %Y')} 
+        and {time_period_filtered_px_return_df.index[-1].strftime('%#d %B %Y')}.
+        """
+    )
+    # if a start date is specified, check if any tickers have listed data after the start date
+    constrained_tickers = []
+    if start_date:
+        for ticker, first_date in ticker_first_date_map.items():
+            if first_date.date() > start_date:
+                constrained_tickers.append(
+                    f"{ticker} ({first_date.strftime('%#d %B %Y')})"
+                )
+        if len(constrained_tickers):
+            st.warning(
+                f"""
+                            Note: The time period was constrained by available price data for %s.
+                            """
+                % ", ".join(constrained_tickers)
+                , icon="🚨")
+
     # calculate the total historical beta
-    total_hist_beta = rolling_beta(price_return_df=px_return_df.loc[start_date: end_date, :],
+    total_hist_beta = rolling_beta(price_return_df=time_period_filtered_px_return_df,
                                    benchmark_col_name='Benchmark',
-                                   window=px_return_df.loc[start_date: end_date, :].shape[0]).iloc[-1, :]
+                                   window=time_period_filtered_px_return_df.shape[0]).iloc[-1, :]
 
     # show the results: Beta, R2 and p-value
     result_columns = st.empty().columns(3)
@@ -221,7 +252,7 @@ def calculate_and_display_beta(px_return_df: pd.DataFrame) -> None:
     result_columns[2].metric('p-value (Beta)', f"{round(100 * total_hist_beta['p_value_Benchmark'], 2)}%")
 
     # make scatter plot
-    make_scatter_plot(px_return_df=px_return_df)
+    make_scatter_plot(px_return_df=time_period_filtered_px_return_df)
 
     # make rolling beta correlation line plot
     beta_roll = rolling_beta(price_return_df=px_return_df,
@@ -243,12 +274,66 @@ def calculate_and_display_beta(px_return_df: pd.DataFrame) -> None:
         },
         inplace=True
     )
-    fig = px.line(beta_roll,
-                  x='Date',
-                  y='Beta',
-                  title='Rolling Beta',
-                  hover_data=['p-value (Beta)', 'Adj. R squared'])
-    st.plotly_chart(fig, key="beta_line_plot", on_select="rerun")
+
+    display_rolling_stats(beta_roll)
+    return
+
+
+@st.experimental_fragment()
+def display_rolling_stats(beta_roll) -> None:
+    """
+    Plots a rolling beta stats as a line as well as a distribution plot
+    :param beta_roll:
+    :return:
+    """
+    y_value_label = st.selectbox('Rolling statistic', ['Beta', 'Adj. R squared', 'Correlation'])
+    hover_data = ['Beta', 'Adj. R squared', 'Correlation', 'p-value (Beta)']
+    hover_data.remove(y_value_label)
+
+    # historical line plot
+    line_fig = px.line(
+        data_frame=beta_roll,
+        x='Date',
+        y=y_value_label,
+        title=f'Rolling {y_value_label}',
+        hover_data=hover_data)
+
+    # show the median, average and standard deviation of the rolling statistic
+    beta_stat_series = beta_roll[y_value_label].copy()
+    beta_stat_series.dropna(inplace=True)
+    median = beta_stat_series.median()
+    avg = beta_stat_series.mean()
+    std = beta_stat_series.std()
+
+    if y_value_label in ['Adj. R squared', 'Correlation']:
+        median *= 100
+        avg *= 100
+        std *= 100
+        suffix = '%'
+    else:
+        suffix = ''
+
+    result_columns = st.empty().columns(3)
+    result_columns[0].metric('Median', f"{round(median, 2)}{suffix}")
+    result_columns[1].metric('Average', f"{round(avg, 2)}{suffix}")
+    result_columns[2].metric('Standard Deviation', f"{round(std, 2)}{suffix}")
+
+    # historical distribution plot
+    dist_fig = ff.create_distplot(
+        hist_data=[beta_stat_series.tolist()],
+        group_labels=[y_value_label],
+        bin_size=0.1,
+        show_rug=False,
+        rug_text=y_value_label,
+    )
+    dist_fig.update_layout(
+        title_text=f'Historical distribution of rolling {y_value_label}',
+        xaxis_title=f"Values of {y_value_label}",
+        yaxis_title="Relative frequency (%)"
+    )
+
+    st.plotly_chart(line_fig, key="beta_line_plot", on_select="rerun")
+    st.plotly_chart(dist_fig, key="beta_dist_plot", on_select="rerun")
     return
 
 
@@ -269,20 +354,27 @@ def perform_calculation() -> None:
 
     # check so that there are enough tickers
     if not len(portfolio_tickers):
-        st.write("Portfolio is empty! (Click 'Portfolio' in the sidebar)")
+        st.warning("Portfolio is empty! Click 'Portfolio' in the sidebar and enter a ticker", icon="🚨")
         return
     elif not len(benchmark_tickers):
-        st.write("No benchmark selected! (Click 'Benchmark' below)")
+        st.warning("No benchmark selected! Click 'Benchmark' and enter a ticker", icon="🚨")
         return
 
     # download the prices for each ticker
     # sort the tickers so that if the tickers are the same there will be no download of data (cache data)
     tickers.sort()
-    px_df = get_price_df(tickers=tickers)
+    px_df = get_price_df(tickers=tickers)  # this takes time so the function uses st.catch_data decorator
 
     # forward fill all nan for the FX tickers
     for fx_ticker in fx_tickers:
         px_df[fx_ticker].fillna(method='ffill', inplace=True)
+
+    # get the start date for each ticker in a dict
+    ticker_first_date_map = {}
+    for ticker in px_df.columns:
+        ticker_first_date_map[ticker] = px_df[ticker].first_valid_index()
+
+    # drop all nan so that returns are always calculated when all tickers has values
     px_df.dropna(inplace=True)
 
     # calculate the backtested portfolio
@@ -310,7 +402,7 @@ def perform_calculation() -> None:
     px_return_df = get_price_return_df(px_df=bt_df)
 
     # scatter plot of the beta measured over the entire selected period
-    calculate_and_display_beta(px_return_df=px_return_df)
+    calculate_and_display_beta(px_return_df=px_return_df, ticker_first_date_map=ticker_first_date_map)
     return
 
 
@@ -349,6 +441,7 @@ def display_positions(table_name: str, input_type: str) -> None:
     tickers = get_table_tickers(table_name=table_name)
     if len(tickers):
         if input_type == 'Shares':
+            raise NotImplemented('Shares are not correctly implemented yet')
             df = pd.DataFrame(table_positions_map[table_name])
             df.rename(columns={'ticker': 'Ticker', 'qty': input_type}, inplace=True)
             st.dataframe(data=df, use_container_width=True)
@@ -357,7 +450,10 @@ def display_positions(table_name: str, input_type: str) -> None:
             df = pd.DataFrame(table_positions_map[table_name])
             df.rename(columns={'ticker': 'Ticker', 'qty': input_type}, inplace=True)
             df = df.loc[df['Ticker'].isin(tickers), :]
-            df.loc[:, input_type] /= df.loc[:, input_type].sum()  # normalize the weights
+            weight_sum = df.loc[:, input_type].sum()
+            if weight_sum != 100.0:
+                st.warning("Weights don't add up to 100% but no biggie they will be normalized", icon="⚠️")
+                df.loc[:, input_type] /= df.loc[:, input_type].sum()  # normalize the weights
             fig = px.pie(data_frame=df,
                          values=input_type,
                          names='Ticker',
@@ -371,7 +467,7 @@ def display_positions(table_name: str, input_type: str) -> None:
 st.title('Beta')
 st.write('This tool allows you to calculate regression Betas for a specified portfolio and a benchmark.\nThe benchmark '
          'can either be a single or a weighted portfolio of underlyings.')
-st.button(f'Calculate beta', on_click=perform_calculation)
+calculate = st.toggle('Calculate Beta')
 with st.expander('Implementation steps'):
     st.write(
         "1. Create a portfolio in the left sidebar\n\n2. Setup a benchmark by clicking 'Benchmark' below\n\n3. (Optional) "
@@ -399,9 +495,18 @@ with st.expander('Benchmark'):
 # model configuration for the beta calculation like return observation and window for the rolling calculation
 with st.expander(f'Model configuration'):
     config_row_columns = st.empty().columns((2, 2))
-    px_return_basis = config_row_columns[0].selectbox('Return basis',
-                                                      [k for k, _ in RETURN_CALCULATION_CONFIG.items()])
-    allow_return_overlap = config_row_columns[1].toggle('Allow overlapping returns', value=False)
+    return_basis_options = [k for k, _ in RETURN_CALCULATION_CONFIG.items()]
+    px_return_basis = config_row_columns[0].selectbox(label='Return basis',
+                                                      options=return_basis_options,
+                                                      index=return_basis_options.index('Monthly Returns'),
+                                                      help="Daily, weekly, monthly or yearly returns.")
+    allow_return_overlap = config_row_columns[1].toggle(
+        label='Allow overlapping returns',
+        value=False,
+        help="Assuming monthly returns, one can either gather daily observed monthly returns that will overlap or "
+             "non-overlapping monthly observed monthly returns. \n\nIn general, non-overlapping returns are preferred but "
+             "for lower frequencies one runs the risk of either a) not having enough data or b) discarding data that could be "
+             "informative. In practice, I have mostly seen overlapping returns being used.")
 
     if allow_return_overlap:
         default_window = 252
@@ -468,3 +573,6 @@ with st.expander("Wiki"):
         We could instead reject the ${\displaystyle H_{0}}$ with 5% significance level.
         """
     )
+
+if calculate:
+    perform_calculation()
