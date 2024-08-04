@@ -216,3 +216,17 @@ def get_currency_ticker_map(ticker_currency_target_map: dict) -> dict:
     return result
 
 
+def main():
+    tickers = ['^SPX', '^STOXX']
+    prices = get_adjclose_price_data(
+        tickers=tickers,
+    )
+    prices.fillna(method='ffill', inplace=True)
+    prices.dropna(inplace=True)
+    prices /= prices.iloc[0, :]
+    prices.to_clipboard()
+
+
+if __name__ == '__main__':
+    main()
+
