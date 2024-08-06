@@ -326,7 +326,7 @@ def display_rolling_stats(beta_roll) -> None:
         suffix = ''
 
     result_columns = st.empty().columns(4)
-    result_columns[0].metric(f'{y_value_label} (as of {latest_date.strftime('%#d %B %Y')})', f"{round(latest_value, 2)}{suffix}")
+    result_columns[0].metric(f"{y_value_label} (as of {latest_date.strftime('%#d %B %Y')})", f"{round(latest_value, 2)}{suffix}")
     result_columns[1].metric('Median', f"{round(median, 2)}{suffix}")
     result_columns[2].metric('Average', f"{round(avg, 2)}{suffix}")
     result_columns[3].metric('Standard Deviation', f"{round(std, 2)}{suffix}")
