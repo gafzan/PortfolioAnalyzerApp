@@ -277,6 +277,7 @@ def calculate_and_display_beta(px_return_df: pd.DataFrame, ticker_first_date_map
     )
 
     display_rolling_stats(beta_roll)
+
     st.write(
         f"""
         Based on prices from Yahoo Finance between {time_period_filtered_px_return_df.index[0].strftime('%#d %B %Y')} 
