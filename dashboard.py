@@ -91,7 +91,7 @@ def generate_ticker_row(row_id, num_input_label: str, table_name: str) -> dict:
     ticker_row_columns = row_container.columns((2, 2, 3, 2, 1))
     row_tick = ticker_row_columns[0].text_input("Ticker", key=f"txt_{row_id}",
                                                 help="Insert Yahoo Finance tickers. Tickers for indices starts with "
-                                                     "'^'. For example, to get S&P 500 type '^SPX'").upper()
+                                                     "'^'. For example, to get S&P 500 type '^SPX'").upper().replace(" ", "")
     if num_input_label == 'Weight (%)':
         row_qty = ticker_row_columns[1].number_input(num_input_label, min_value=0.0, max_value=100.0, value=100.0,
                                                      key=f"nbr_{row_id}",
@@ -217,13 +217,6 @@ def calculate_and_display_beta(px_return_df: pd.DataFrame, ticker_first_date_map
     # filter the price return based on start and end dates
     time_period_filtered_px_return_df = px_return_df.loc[start_date: end_date, :].copy()
 
-    # write a disclaimer about the data availability
-    st.write(
-        f"""
-        Based on prices from Yahoo Finance between {time_period_filtered_px_return_df.index[0].strftime('%#d %B %Y')} 
-        and {time_period_filtered_px_return_df.index[-1].strftime('%#d %B %Y')}.
-        """
-    )
     # if a start date is specified, check if any tickers have listed data after the start date
     constrained_tickers = []
     if start_date:
@@ -233,6 +226,7 @@ def calculate_and_display_beta(px_return_df: pd.DataFrame, ticker_first_date_map
                     f"{ticker} ({first_date.strftime('%#d %B %Y')})"
                 )
         if len(constrained_tickers):
+            # write a disclaimer about the data availability
             st.warning(
                 f"""
                             Note: The time period was constrained by available price data for %s.
@@ -253,6 +247,13 @@ def calculate_and_display_beta(px_return_df: pd.DataFrame, ticker_first_date_map
 
     # make scatter plot
     make_scatter_plot(px_return_df=time_period_filtered_px_return_df)
+
+    st.write(
+        f"""
+            Based on prices from Yahoo Finance between {time_period_filtered_px_return_df.index[0].strftime('%#d %B %Y')} 
+            and {time_period_filtered_px_return_df.index[-1].strftime('%#d %B %Y')}. Historical Beta is calculated using {time_period_filtered_px_return_df.shape[0]} {px_return_basis.lower()}. 
+            """
+    )
 
     # make rolling beta correlation line plot
     beta_roll = rolling_beta(price_return_df=px_return_df,
@@ -276,6 +277,13 @@ def calculate_and_display_beta(px_return_df: pd.DataFrame, ticker_first_date_map
     )
 
     display_rolling_stats(beta_roll)
+    st.write(
+        f"""
+        Based on prices from Yahoo Finance between {time_period_filtered_px_return_df.index[0].strftime('%#d %B %Y')} 
+            and {time_period_filtered_px_return_df.index[-1].strftime('%#d %B %Y')}.
+                Rolling Beta is calculated based on {rolling_config} {px_return_basis.lower()}.
+                """
+    )
     return
 
 
@@ -304,19 +312,23 @@ def display_rolling_stats(beta_roll) -> None:
     median = beta_stat_series.median()
     avg = beta_stat_series.mean()
     std = beta_stat_series.std()
+    latest_value = beta_stat_series.iloc[-1]
+    latest_date = beta_roll[['Date', y_value_label]].dropna().iloc[-1]['Date']
 
     if y_value_label in ['Adj. R squared', 'Correlation']:
         median *= 100
         avg *= 100
         std *= 100
+        latest_value *= 100
         suffix = '%'
     else:
         suffix = ''
 
-    result_columns = st.empty().columns(3)
-    result_columns[0].metric('Median', f"{round(median, 2)}{suffix}")
-    result_columns[1].metric('Average', f"{round(avg, 2)}{suffix}")
-    result_columns[2].metric('Standard Deviation', f"{round(std, 2)}{suffix}")
+    result_columns = st.empty().columns(4)
+    result_columns[0].metric(f'{y_value_label} (as of {latest_date.strftime('%#d %B %Y')})', f"{round(latest_value, 2)}{suffix}")
+    result_columns[1].metric('Median', f"{round(median, 2)}{suffix}")
+    result_columns[2].metric('Average', f"{round(avg, 2)}{suffix}")
+    result_columns[3].metric('Standard Deviation', f"{round(std, 2)}{suffix}")
 
     # historical distribution plot
     dist_fig = ff.create_distplot(
