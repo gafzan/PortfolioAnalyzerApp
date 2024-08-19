@@ -116,6 +116,9 @@ def _get_price_data(tickers: {str, list}, data_fld: str, start_date: str = None,
     :param end_date: str
     :return: DataFrame
     """
+    if not isinstance(tickers, list):
+        tickers = [tickers]
+
     # handle the data field input
     data_fld = data_fld.lower()
     eligible_flds = ['open', 'high', 'low', 'close', 'adjclose', 'volume']
@@ -202,7 +205,7 @@ def get_currency_ticker_map(ticker_currency_target_map: dict) -> dict:
 
     result = {}  # initialize the result
     for ticker in tickers:
-        denominated_ccy = yf_query.summary_detail[ticker]['currency']
+        denominated_ccy = yf_query.summary_detail[ticker]['currency'].upper()
         target_currency = ticker_currency_target_map[ticker]
 
         # if the denominated currency is the same as the target, ignore the ticker
@@ -214,19 +217,4 @@ def get_currency_ticker_map(ticker_currency_target_map: dict) -> dict:
                 # quotation currency_
                 result[ticker] = f'{denominated_ccy}{target_currency}=X'
     return result
-
-
-def main():
-    tickers = ['^SPX', '^STOXX']
-    prices = get_adjclose_price_data(
-        tickers=tickers,
-    )
-    prices.fillna(method='ffill', inplace=True)
-    prices.dropna(inplace=True)
-    prices /= prices.iloc[0, :]
-    prices.to_clipboard()
-
-
-if __name__ == '__main__':
-    main()
 
