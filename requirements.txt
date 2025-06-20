@@ -3,8 +3,8 @@ pandas
 numpy
 plotly
 requests
-yahoo-fin==0.8.9.1
-yahooquery=2.3.7
+yahoo-fin
+yahooquery
 statsmodels
 yfinance==0.2.63
-websockets==15.0.1
+websockets
