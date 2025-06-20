@@ -99,7 +99,7 @@ def get_raw_stock_data(tickers: {str, list}, start_date: str = None, end_date: s
         tickers = [tickers]
 
     # pull price data for all tickers
-    data = {t: stock_info.get_data(t, start_date=start_date, end_date=end_date) for t in tickers}
+    data = {t: stock_info.get_data(t, start_date=start_date, end_date=end_date, headers={'User-agent': 'Mozilla/5.0'}) for t in tickers}
 
     if return_as_df:
         data = reduce(lambda x, y: x._append(y), data.values())
