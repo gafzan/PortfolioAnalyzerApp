@@ -6,3 +6,4 @@ requests
 yahoo-fin
 yahooquery
 statsmodels
+yfinance==0.2.63
