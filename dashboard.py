@@ -477,11 +477,12 @@ def display_positions(table_name: str, input_type: str) -> None:
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Main page
+st.set_page_config(initial_sidebar_state="expanded")
 st.title('Beta')
 st.write('This tool allows you to calculate regression Betas for a specified portfolio and a benchmark.\nThe benchmark '
          'can either be a single or a weighted portfolio of underlyings.')
 calculate = st.toggle('Calculate Beta')
-with st.expander('Implementation steps'):
+with st.expander('User guide ❓'):
     st.write(
         "1. Create a portfolio in the left sidebar\n\n2. Setup a benchmark by clicking 'Benchmark' below\n\n3. (Optional) "
         "Adjust the Beta calculation under 'Model configuration'\n\n4. Click 'Calculate beta'"
@@ -493,7 +494,7 @@ price_type = st.sidebar.radio('Price', ['Close', 'Adj. Close'], help="Adjusted c
 
 # ----------------------------------------------------------------------------------------------------------------------
 # widgets for the sidebar
-with st.sidebar.expander('Portfolio'):
+with st.sidebar.expander('Portfolio 📈', expanded=True):
     # weight_or_shares_option = st.radio('Weight or shares', ['Weight (%)', 'Shares'])
     weight_or_shares_option = 'Weight (%)'
 
@@ -501,12 +502,12 @@ with st.sidebar.expander('Portfolio'):
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Benchmark for Beta
-with st.expander('Benchmark'):
+with st.expander('Benchmark 🗠'):
     setup_position_widgets(table_name='benchmark', input_type='Weight (%)')
 
 # ----------------------------------------------------------------------------------------------------------------------
 # model configuration for the beta calculation like return observation and window for the rolling calculation
-with st.expander(f'Model configuration'):
+with st.expander(f'Model configuration 🔢'):
     config_row_columns = st.empty().columns((2, 2))
     return_basis_options = [k for k, _ in RETURN_CALCULATION_CONFIG.items()]
     px_return_basis = config_row_columns[0].selectbox(label='Return basis',
@@ -537,7 +538,7 @@ with st.expander(f'Model configuration'):
 
 # ----------------------------------------------------------------------------------------------------------------------
 # explanation of the model and various results in a wiki page
-with st.expander("Wiki"):
+with st.expander("Wiki 📚"):
     st.header('Beta')
     st.write("Beta (β) is a statistic that measures the estimated increase or decrease of an individual stock price or "
              "portfolio proportion to movements of a benchmark. When the benchmark is a broad market index, Beta can be "
